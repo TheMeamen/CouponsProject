@@ -1,0 +1,130 @@
+// Import required modules
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import axios from 'axios';
+
+// Base API URL for the Java Spring server
+const BASE_URL = 'http://localhost:8080';
+
+// Authentication helper
+const Auth = {
+  isAuthenticated: false,
+  token: null,
+
+  login: async (username, password) => {
+    try {
+      const response = await axios.post(`${BASE_URL}/login`, { username, password });
+      Auth.isAuthenticated = true;
+      Auth.token = response.data.token;
+      axios.defaults.headers.common['Authorization'] = `Bearer ${Auth.token}`;
+      return response.data;
+    } catch (error) {
+      console.error(error);
+      Auth.isAuthenticated = false;
+      Auth.token = null;
+      throw error;
+    }
+  },
+
+  logout: () => {
+    Auth.isAuthenticated = false;
+    Auth.token = null;
+    delete axios.defaults.headers.common['Authorization'];
+  },
+};
+
+// Components
+const Login = ({ onLogin }) => {
+  const [username, setUsername] = React.useState('');
+  const [password, setPassword] = React.useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await Auth.login(username, password);
+      onLogin();
+    } catch (error) {
+      alert('Login failed. Please check your credentials.' + error);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <h1>Login</h1>
+      <input
+        type="text"
+        placeholder="Username"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+      />
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <button type="submit">Login</button>
+    </form>
+  );
+};
+
+const Dashboard = ({ role }) => (
+  <div>
+    <h1>{role} Dashboard</h1>
+    <p>Welcome to the {role} dashboard.</p>
+  </div>
+);
+
+const ProtectedRoute = ({ children }) => {
+  if (!Auth.isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+  return children;
+};
+
+const App = () => {
+  const [role, setRole] = React.useState(null);
+
+  const handleLogin = async () => {
+    try {
+      const response = await axios.get(`${BASE_URL}/auth/role`); // Assume Spring has a role endpoint
+      setRole(response.data.role);
+    } catch (error) {
+      console.error(error);
+      Auth.logout();
+    }
+  };
+
+  const handleLogout = () => {
+    Auth.logout();
+    setRole(null);
+  };
+
+  return (
+    <Router>
+      <div>
+        {Auth.isAuthenticated && <button onClick={handleLogout}>Logout</button>}
+        <Routes>
+          <Route
+            path="/login"
+            element={<Login onLogin={handleLogin} />}
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard role={role} />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/login" />} />
+        </Routes>
+      </div>
+    </Router>
+  );
+};
+
+// Render the app
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
